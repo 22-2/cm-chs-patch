@@ -4,7 +4,11 @@ import setupCM6 from "./cm6";
 import { JpPatchSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { japanesePatternGlobal, isJapanese } from "./utils.js";
 
-const CJK_RANGE_LIMIT = 10;
+// 極端に長い1行（数十万文字のペースト等）への保険としての上限。
+// Intl.Segmenter は辞書ベースで前後の文脈から単語境界を決めるため、
+// 10文字のような小さい値で切ると境界がズレることがある。
+// 実測では2,000文字の分割でも約0.3msなので、この程度なら精度・速度とも問題ない。
+const CJK_RANGE_LIMIT = 1000;
 
 // Japanese punctuation characters used as segment boundaries in minimal mode
 const japanesePunctuationPattern = /[、。！？…「」『』（）［］｛｝〈〉《》【】：；・]/u;
