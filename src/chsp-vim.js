@@ -22,7 +22,8 @@ export class VimPatcher extends Component {
     return window.CodeMirrorAdapter?.Vim;
   }
   get enabled() {
-    return !!(window.Intl?.Segmenter);
+    // minimal mode doesn't need Intl.Segmenter
+    return this.plugin.settings.minimalMode || !!(window.Intl?.Segmenter);
   }
 
   onload() {

@@ -6,6 +6,25 @@ import { japanesePatternGlobal, isJapanese } from "./utils.js";
 
 const CJK_RANGE_LIMIT = 10;
 
+// Japanese punctuation characters used as segment boundaries in minimal mode
+const japanesePunctuationPattern = /[、。！？…「」『』（）［］｛｝〈〉《》【】：；・]/u;
+
+function minimalCut(text: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  for (const char of text) {
+    if (japanesePunctuationPattern.test(char) || /\s/.test(char)) {
+      if (current) result.push(current);
+      result.push(char);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  if (current) result.push(current);
+  return result;
+}
+
 export default class CMJpPatch extends Plugin {
   async onload() {
     this.addSettingTab(new JpPatchSettingTab(this));
@@ -32,6 +51,11 @@ export default class CMJpPatch extends Plugin {
   segmenter?: Intl.Segmenter;
 
   async loadSegmenter(): Promise<boolean> {
+    // minimal mode doesn't need Intl.Segmenter
+    if (this.settings.minimalMode) {
+      console.info("Minimal mode: using punctuation-based splitting");
+      return true;
+    }
     if (window.Intl?.Segmenter) {
       this.segmenter = new Intl.Segmenter("ja-JP", {
         granularity: "word",
@@ -44,6 +68,9 @@ export default class CMJpPatch extends Plugin {
   }
 
   cut(text: string): string[] {
+    if (this.settings.minimalMode) {
+      return minimalCut(text);
+    }
     return Array.from(this.segmenter!.segment(text)).map((seg) => seg.segment);
   }
 
@@ -55,19 +82,21 @@ export default class CMJpPatch extends Plugin {
     if (!isJapanese(text)) {
       return null;
     } else {
-      // trim long text for performance
-      if (cursor - from > CJK_RANGE_LIMIT) {
-        const newFrom = cursor - CJK_RANGE_LIMIT;
-        if (isJapanese(text.slice(newFrom, cursor))) {
-          text = text.slice(newFrom - from);
-          from = newFrom;
+      // In full mode, trim long text for performance
+      if (!this.settings.minimalMode) {
+        if (cursor - from > CJK_RANGE_LIMIT) {
+          const newFrom = cursor - CJK_RANGE_LIMIT;
+          if (isJapanese(text.slice(newFrom, cursor))) {
+            text = text.slice(newFrom - from);
+            from = newFrom;
+          }
         }
-      }
-      if (to - cursor > CJK_RANGE_LIMIT) {
-        const newTo = cursor + CJK_RANGE_LIMIT;
-        if (isJapanese(text.slice(cursor, newTo))) {
-          text = text.slice(0, newTo - to);
-          to = newTo;
+        if (to - cursor > CJK_RANGE_LIMIT) {
+          const newTo = cursor + CJK_RANGE_LIMIT;
+          if (isJapanese(text.slice(cursor, newTo))) {
+            text = text.slice(0, newTo - to);
+            to = newTo;
+          }
         }
       }
       const segResult = this.cut(text);
@@ -100,10 +129,16 @@ export default class CMJpPatch extends Plugin {
     sliceDoc: (from: number, to: number) => string,
   ): number | null {
     const forward = startPos < nextPos;
-    const text = limitJapaneseChars(
-      forward ? sliceDoc(startPos, nextPos) : sliceDoc(nextPos, startPos),
-      forward,
-    );
+    const rawText = forward
+      ? sliceDoc(startPos, nextPos)
+      : sliceDoc(nextPos, startPos);
+
+    // In minimal mode, don't limit — scan all the way to the next punctuation
+    // In full mode, limit to CJK_RANGE_LIMIT for performance
+    const text = this.settings.minimalMode
+      ? rawText
+      : limitJapaneseChars(rawText, forward);
+
     if (!isJapanese(text)) return null;
     const segResult = this.cut(text);
     if (segResult.length === 0) return null;

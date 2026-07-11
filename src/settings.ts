@@ -2,11 +2,13 @@ import { PluginSettingTab, Setting, SettingGroup } from "obsidian";
 import type CMJpPatch from "./chsp-main";
 
 export interface JpPatchSetting {
+  minimalMode: boolean;
   moveByJapaneseWords: boolean;
   moveTillJapanesePunctuation: boolean;
 }
 
 export const DEFAULT_SETTINGS: JpPatchSetting = {
+  minimalMode: false,
   moveByJapaneseWords: true,
   moveTillJapanesePunctuation: true,
 };
@@ -31,10 +33,20 @@ export class JpPatchSettingTab extends PluginSettingTab {
     const segmenterGroup = new SettingGroup(containerEl).setHeading("分かち書き");
 
     segmenterGroup.addSetting((setting) =>
-      setting
-        .setName("Intl.Segmenter")
+      this.bindToggle(setting, "minimalMode")
+        .setName("最小モード")
         .setDesc(
-          "ブラウザ組み込みの Intl.Segmenter API (ja-JP) を使用して日本語の単語境界を検出します",
+          "句読点（、。「」など）のみで分割します。オフの場合は Intl.Segmenter (ja-JP) による形態素解析で単語境界を検出します",
+        ),
+    );
+
+    segmenterGroup.addSetting((setting) =>
+      setting
+        .setName(this.plugin.settings.minimalMode ? "句読点ベース分割" : "Intl.Segmenter")
+        .setDesc(
+          this.plugin.settings.minimalMode
+            ? "日本語の句読点と空白のみを境界として分割します"
+            : "ブラウザ組み込みの Intl.Segmenter API (ja-JP) を使用して日本語の単語境界を検出します",
         ),
     );
 
