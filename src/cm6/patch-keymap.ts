@@ -8,9 +8,9 @@ import type {
 import { EditorSelection, findClusterBreak } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 
-import type CMChsPatch from "../chsp-main";
+import type CMJpPatch from "../chsp-main";
 
-export const patchKeymap = (plugin: CMChsPatch) => {
+export const patchKeymap = (plugin: CMJpPatch) => {
   // based on https://github.com/codemirror/commands/releases/tag/6.1.1
 
   function deleteBy(target: CommandTarget, by: (start: number) => number) {

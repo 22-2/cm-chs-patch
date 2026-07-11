@@ -8,7 +8,6 @@ declare module "obsidian" {
 }
 
 declare global {
-  declare const __JIEBA_VERSION__: string;
   declare var CodeMirrorAdapter: any;
   declare var CodeMirror: typeof import("codemirror");
 }

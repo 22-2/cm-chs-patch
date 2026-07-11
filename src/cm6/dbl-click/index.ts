@@ -4,11 +4,11 @@ import type { SelectionRange } from "@codemirror/state";
 import type { MouseSelectionStyle } from "@codemirror/view";
 import { EditorView } from "@codemirror/view";
 
-import type CMChsPatch from "../../chsp-main";
-import cm6GetChsSeg from "../get-seg";
+import type CMJpPatch from "../../chsp-main";
+import cm6GetJpSeg from "../get-seg";
 import { groupAt, queryPos } from "./from-src";
 
-export const dblClickPatch = (plugin: CMChsPatch) => {
+export const dblClickPatch = (plugin: CMJpPatch) => {
   /** only accept double click */
   const rangeForClick = (
     view: EditorView,
@@ -17,7 +17,7 @@ export const dblClickPatch = (plugin: CMChsPatch) => {
     _type: number,
   ): SelectionRange => {
     const range = groupAt(view.state, pos, bias);
-    return cm6GetChsSeg(plugin, pos, range, view.state) ?? range;
+    return cm6GetJpSeg(plugin, pos, range, view.state) ?? range;
   };
   const dblClickPatch = EditorView.mouseSelectionStyle.of((view, event) => {
     // Only handle double clicks

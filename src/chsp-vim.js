@@ -22,9 +22,7 @@ export class VimPatcher extends Component {
     return window.CodeMirrorAdapter?.Vim;
   }
   get enabled() {
-    return (
-      (this.plugin.settings.useJieba || window.Intl?.Segmenter)
-    );
+    return !!(window.Intl?.Segmenter);
   }
 
   onload() {
@@ -32,18 +30,18 @@ export class VimPatcher extends Component {
     // only patch when enabled, so that default method is preserved when disabled
     // useful when obsidian updates breaks the patch and
     // user needs to disable patch to get vim working again
-    if (this.enabled && this.plugin.settings.moveByChineseWords) {
-      this.enableMoveByChineseWords(this.vim);
+    if (this.enabled && this.plugin.settings.moveByJapaneseWords) {
+      this.enableMoveByJapaneseWords(this.vim);
     }
-    if (this.enabled && this.plugin.settings.moveTillChinesePunctuation) {
-      this.enableMoveTillChinesePunctuation(this.vim);
+    if (this.enabled && this.plugin.settings.moveTillJapanesePunctuation) {
+      this.enableMoveTillJapanesePunctuation(this.vim);
     }
   }
 
   /**
    * @param {*} vim
    */
-  enableMoveByChineseWords(vim) {
+  enableMoveByJapaneseWords(vim) {
     // @ts-ignore
     vim.defineMotion("moveByWords", (cm, head, motionArgs) => {
       return this.utils.moveToWord(
@@ -59,7 +57,7 @@ export class VimPatcher extends Component {
   /**
    * @param {*} vim
    */
-  enableMoveTillChinesePunctuation(vim) {
+  enableMoveTillJapanesePunctuation(vim) {
     const { recordLastCharacterSearch, moveToCharacter } = this.utils;
     // @ts-ignore
     vim.defineMotion("moveToCharacter", (cm, head, motionArgs) => {

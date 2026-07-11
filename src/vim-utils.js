@@ -1,19 +1,19 @@
 /* eslint-disable no-constant-condition */
 // source: obsidian v1.1.12
 
-import { isChs } from "./utils.js";
+import { isJapanese } from "./utils.js";
 
-// 中英文标点映射
-const chinese_punctuation_mapping = {
+// English to Japanese punctuation mapping
+const japanese_punctuation_mapping = {
   ".": "。",
-  ",": "，",
+  ",": "、",
   ":": "：",
   ";": "；",
   '?': "？",
   "\\": "、",
-  '"': "“",
-  '<': "《",
-  '>': "》",
+  '"': "＂",
+  '<': "〈",
+  '>': "〉",
   "[": "「",
   "]": "」",
   "(": "（",
@@ -46,11 +46,6 @@ export function utils({ vim, CodeMirror, cut }) {
       args.selectedCharacter;
   }
   function charIdxInLine(start, line, character, forward, includeChar) {
-    // Search for char in line.
-    // motion_options: {forward, includeChar}
-    // If includeChar = true, include it too.
-    // If forward = true, search forward, else search backwards.
-    // If char is not found on this line, do nothing
     var idx;
     if (forward) {
       idx = line.indexOf(character, start + 1);
@@ -139,7 +134,7 @@ export function utils({ vim, CodeMirror, cut }) {
       idx = charIdxInLine(start, line, character, forward, true);
 
       // #region mod
-      idx = idxbyChsPunctuation(character, start, line, forward, idx);
+      idx = idxbyJpPunctuation(character, start, line, forward, idx);
       // #endregion
       if (idx == -1) {
         return null;
@@ -178,7 +173,7 @@ export function utils({ vim, CodeMirror, cut }) {
         const from = Math.max(pos - 6, 0),
           to = Math.min(pos + 6, line.length);
         const text = line.slice(from, to);
-        if (isChs(text)) {
+        if (isJapanese(text)) {
           const segments = cut(line);
           for (let i = 0; i < charTests.length && !foundWord; ++i) {
             const currentChar = line.charAt(pos);
@@ -190,7 +185,7 @@ export function utils({ vim, CodeMirror, cut }) {
             }
             wordStart = pos;
             while (pos != stop) {
-              // 获取当前光标下的分词，跳过分隔字符
+              // get segment at cursor, skip delimiter chars
               segment = segmentAt(segments, pos);
               if (!charTests[i](segment.text)) break;
               if (forward) {
@@ -212,7 +207,7 @@ export function utils({ vim, CodeMirror, cut }) {
             const foundEnd = forward
               ? Math.min(wordStart + dir, stop)
               : Math.max(wordStart + dir, stop);
-            // 如果光标在分词结尾字符（ +1 字符越界），跳过当前分词，查找下一个分词
+            // if cursor is at segment end (+1 char over), skip current segment, find next
             if (
               wordStart == cur.ch &&
               lineNum == cur.line &&
@@ -270,13 +265,13 @@ export function utils({ vim, CodeMirror, cut }) {
 
   // #endregion
 
-  /** custom function */
-  function idxbyChsPunctuation(character, start, line, forward, idx) {
+  /** Custom function: maps English punctuation to Japanese equivalents for f/t motions */
+  function idxbyJpPunctuation(character, start, line, forward, idx) {
     if (
       character.length == 1 &&
-      chinese_punctuation_mapping[character] != undefined
+      japanese_punctuation_mapping[character] != undefined
     ) {
-      const punc_char = chinese_punctuation_mapping[character];
+      const punc_char = japanese_punctuation_mapping[character];
       const punc_idx = charIdxInLine(start, line, punc_char, forward, true);
 
       if (punc_idx == -1) {

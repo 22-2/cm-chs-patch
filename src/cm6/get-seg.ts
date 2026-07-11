@@ -1,10 +1,10 @@
 import type { EditorState, SelectionRange } from "@codemirror/state";
 import { EditorSelection } from "@codemirror/state";
 
-import type CMChsPatch from "../chsp-main";
+import type CMJpPatch from "../chsp-main";
 
-const cm6GetChsSeg = (
-  plugin: CMChsPatch,
+const cm6GetJpSeg = (
+  plugin: CMJpPatch,
   pos: number,
   srcRange: { from: number; to: number } | null,
   state: EditorState,
@@ -13,12 +13,12 @@ const cm6GetChsSeg = (
   const { from, to } = srcRange,
     text = state.doc.sliceString(from, to);
 
-  const chsSegResult = plugin.getSegRangeFromCursor(pos, { from, to, text });
-  if (chsSegResult) {
-    return EditorSelection.range(chsSegResult.from, chsSegResult.to);
+  const jpSegResult = plugin.getSegRangeFromCursor(pos, { from, to, text });
+  if (jpSegResult) {
+    return EditorSelection.range(jpSegResult.from, jpSegResult.to);
   } else {
     return null;
   }
 };
 
-export default cm6GetChsSeg;
+export default cm6GetJpSeg;

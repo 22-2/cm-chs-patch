@@ -4,12 +4,12 @@ import { EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { around } from "monkey-around";
 
-import type CMChsPatch from "../chsp-main";
-import { getChsPatchExtension } from "./chs-extension";
-import cm6GetChsSeg from "./get-seg";
+import type CMJpPatch from "../chsp-main";
+import { getJpPatchExtension } from "./chs-extension";
+import cm6GetJpSeg from "./get-seg";
 
-const setupCM6 = (plugin: CMChsPatch) => {
-  plugin.registerEditorExtension(getChsPatchExtension(plugin));
+const setupCM6 = (plugin: CMJpPatch) => {
+  plugin.registerEditorExtension(getJpPatchExtension(plugin));
   // wordAt monkey patch
   plugin.register(
     around(EditorState.prototype, {
@@ -17,15 +17,15 @@ const setupCM6 = (plugin: CMChsPatch) => {
         function (this: EditorState, pos: number) {
           const srcRange = next.call(this, pos);
           return (
-            cm6GetChsSeg(plugin, pos, next.call(this, pos), this) ?? srcRange
+            cm6GetJpSeg(plugin, pos, next.call(this, pos), this) ?? srcRange
           );
         },
     }),
   );
 
-  let origPos: number | null; // 记录 origPos, 判断光标转向
+  let origPos: number | null;
 
-  // 光标选择移动方向类型
+  // cursor movement direction type
   enum Direction {
     BeginAndForward = "BeginAndForward",
     BeginAndBackward = "BeginAndBackward",

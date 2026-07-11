@@ -1,132 +1,20 @@
-import { Platform, Plugin } from "obsidian";
+import { Plugin } from "obsidian";
 import { VimPatcher } from "./chsp-vim.js";
 import setupCM6 from "./cm6";
-import GoToDownloadModal from "./install-guide";
-import { cut, cutForSearch, initJieba } from "./jieba";
-import { ChsPatchSettingTab, DEFAULT_SETTINGS } from "./settings";
-import { chsPatternGlobal, isChs } from "./utils.js";
-import { requireFs, requirePath } from "./require.js";
+import { JpPatchSettingTab, DEFAULT_SETTINGS } from "./settings";
+import { japanesePatternGlobal, isJapanese } from "./utils.js";
 
-const CHS_RANGE_LIMIT = 10;
-const JIEBA_WASM_CLEANUP_PATTERN = /^jieba_rs_wasm_(?:bg|\d+_\d+_\d+)\.wasm$/;
+const CJK_RANGE_LIMIT = 10;
 
-const userDataDir = Platform.isDesktopApp
-  ? // eslint-disable-next-line @typescript-eslint/no-var-requires
-    require("@electron/remote").app.getPath("userData")
-  : null;
-
-export default class CMChsPatch extends Plugin {
-  libName = `jieba_rs_wasm_${__JIEBA_VERSION__.replaceAll(".", "_")}.wasm`;
-  async loadLib(): Promise<ArrayBuffer | null> {
-    if (userDataDir) {
-      try {
-        const buf = await requireFs().readFile(this.libPath);
-        return buf.buffer.slice(
-          buf.byteOffset,
-          buf.byteOffset + buf.byteLength,
-        ) as ArrayBuffer;
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code === "ENOENT") {
-          return null;
-        }
-        throw e;
-      }
-    } else {
-      if (!(await this.app.vault.adapter.exists(this.libPath, true))) {
-        return null;
-      }
-      const buf = await this.app.vault.adapter.readBinary(this.libPath);
-      return buf;
-    }
-  }
-  async libExists(): Promise<boolean> {
-    if (userDataDir) {
-      try {
-        await requireFs().access(this.libPath);
-        return true;
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code === "ENOENT") {
-          return false;
-        }
-        throw e;
-      }
-    } else {
-      return await this.app.vault.adapter.exists(this.libPath, true);
-    }
-  }
-  async saveLib(ab: ArrayBuffer): Promise<void> {
-    if (userDataDir) {
-      await requireFs().writeFile(this.libPath, Buffer.from(ab));
-    } else {
-      await this.app.vault.adapter.writeBinary(this.libPath, ab);
-    }
-  }
-  async deleteLib(): Promise<boolean> {
-    const handledPath = this.libPath;
-    let deleted = false;
-
-    if (userDataDir) {
-      const fs = requireFs();
-      try {
-        await fs.unlink(handledPath);
-        deleted = true;
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      }
-
-      for (const name of await fs.readdir(userDataDir)) {
-        if (!JIEBA_WASM_CLEANUP_PATTERN.test(name)) continue;
-        const path = requirePath().join(userDataDir, name);
-        if (path === handledPath) continue;
-        try {
-          await fs.unlink(path);
-          deleted = true;
-        } catch (e) {
-          if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-        }
-      }
-    } else {
-      const adapter = this.app.vault.adapter;
-      if (await adapter.exists(handledPath, true)) {
-        try {
-          await adapter.remove(handledPath);
-          deleted = true;
-        } catch (e) {
-          if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-        }
-      }
-
-      const { files } = await adapter.list(this.app.vault.configDir);
-      for (const path of files) {
-        const name = path.slice(path.lastIndexOf("/") + 1);
-        if (!JIEBA_WASM_CLEANUP_PATTERN.test(name) || path === handledPath)
-          continue;
-        try {
-          await adapter.remove(path);
-          deleted = true;
-        } catch (e) {
-          if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-        }
-      }
-    }
-    return deleted;
-  }
-  get libPath(): string {
-    if (userDataDir) {
-      return requirePath().join(userDataDir, this.libName);
-    } else {
-      return [this.app.vault.configDir, this.libName].join("/");
-    }
-  }
-
+export default class CMJpPatch extends Plugin {
   async onload() {
-    this.addSettingTab(new ChsPatchSettingTab(this));
+    this.addSettingTab(new JpPatchSettingTab(this));
 
     await this.loadSettings();
 
     if (await this.loadSegmenter()) {
       setupCM6(this);
-      console.info("editor word splitting patched");
+      console.info("Japanese editor word splitting patched");
     }
     this.addChild(new VimPatcher(this));
   }
@@ -144,32 +32,19 @@ export default class CMChsPatch extends Plugin {
   segmenter?: Intl.Segmenter;
 
   async loadSegmenter(): Promise<boolean> {
-    if (!this.settings.useJieba && window.Intl?.Segmenter) {
-      this.segmenter = new Intl.Segmenter("zh-CN", {
+    if (window.Intl?.Segmenter) {
+      this.segmenter = new Intl.Segmenter("ja-JP", {
         granularity: "word",
       });
-      console.info("window.Intl.Segmenter loaded");
+      console.info("window.Intl.Segmenter (ja-JP) loaded");
       return true;
     }
-
-    const jiebaBinary = await this.loadLib();
-    if (!jiebaBinary) {
-      new GoToDownloadModal(this).open();
-      return false;
-    }
-    await initJieba(jiebaBinary, this.settings.dict);
-    console.info("Jieba loaded");
-    return true;
+    console.error("Intl.Segmenter is not available in this environment");
+    return false;
   }
 
-  cut(text: string, { search = false }: { search?: boolean } = {}): string[] {
-    if (!this.settings.useJieba && this.segmenter) {
-      return Array.from(this.segmenter.segment(text)).map((seg) => seg.segment);
-    }
-    if (search) {
-      return cutForSearch(text, this.settings.hmm);
-    }
-    return cut(text, this.settings.hmm);
+  cut(text: string): string[] {
+    return Array.from(this.segmenter!.segment(text)).map((seg) => seg.segment);
   }
 
   getSegRangeFromCursor(
@@ -177,23 +52,20 @@ export default class CMChsPatch extends Plugin {
     range: { from: number; to: number; text: string },
   ) {
     let { from, to, text } = range;
-    if (!isChs(text)) {
-      // 匹配中文字符
+    if (!isJapanese(text)) {
       return null;
     } else {
-      // trim long text
-      if (cursor - from > CHS_RANGE_LIMIT) {
-        const newFrom = cursor - CHS_RANGE_LIMIT;
-        if (isChs(text.slice(newFrom, cursor))) {
-          // 英文单词超过 RANGE_LIMIT 被截断，不执行截断优化策略
+      // trim long text for performance
+      if (cursor - from > CJK_RANGE_LIMIT) {
+        const newFrom = cursor - CJK_RANGE_LIMIT;
+        if (isJapanese(text.slice(newFrom, cursor))) {
           text = text.slice(newFrom - from);
           from = newFrom;
         }
       }
-      if (to - cursor > CHS_RANGE_LIMIT) {
-        const newTo = cursor + CHS_RANGE_LIMIT;
-        if (isChs(text.slice(cursor, newTo))) {
-          // 英文单词超过 RANGE_LIMIT 被截断，不执行截断优化策略
+      if (to - cursor > CJK_RANGE_LIMIT) {
+        const newTo = cursor + CJK_RANGE_LIMIT;
+        if (isJapanese(text.slice(cursor, newTo))) {
           text = text.slice(0, newTo - to);
           to = newTo;
         }
@@ -228,11 +100,11 @@ export default class CMChsPatch extends Plugin {
     sliceDoc: (from: number, to: number) => string,
   ): number | null {
     const forward = startPos < nextPos;
-    const text = limitChsChars(
+    const text = limitJapaneseChars(
       forward ? sliceDoc(startPos, nextPos) : sliceDoc(nextPos, startPos),
       forward,
     );
-    if (!isChs(text)) return null;
+    if (!isJapanese(text)) return null;
     const segResult = this.cut(text);
     if (segResult.length === 0) return null;
 
@@ -247,14 +119,14 @@ export default class CMChsPatch extends Plugin {
   }
 }
 
-function limitChsChars(input: string, forward: boolean) {
+function limitJapaneseChars(input: string, forward: boolean) {
   const s = forward ? input : [...input].reverse().join("");
   let endingIndex = s.length - 1;
-  let chsCount = 0;
-  for (const { index } of s.matchAll(chsPatternGlobal)) {
-    chsCount++;
+  let jpCount = 0;
+  for (const { index } of s.matchAll(japanesePatternGlobal)) {
+    jpCount++;
     endingIndex = index;
-    if (chsCount > CHS_RANGE_LIMIT) break;
+    if (jpCount > CJK_RANGE_LIMIT) break;
   }
   const output = s.slice(0, endingIndex + 1);
   if (!forward) {
