@@ -1,7 +1,11 @@
 import { Plugin } from "obsidian";
 import { VimPatcher } from "./chsp-vim.js";
 import setupCM6 from "./cm6";
-import { JpPatchSettingTab, DEFAULT_SETTINGS } from "./settings";
+import {
+  JpPatchSettingTab,
+  DEFAULT_SETTINGS,
+  VSCODE_WORD_SEPARATORS,
+} from "./settings";
 import { japanesePatternGlobal, isJapanese } from "./utils.js";
 
 // 極端に長い1行（数十万文字のペースト等）への保険としての上限。
@@ -11,7 +15,16 @@ import { japanesePatternGlobal, isJapanese } from "./utils.js";
 const CJK_RANGE_LIMIT = 1000;
 
 // Japanese punctuation characters used as segment boundaries in minimal mode
-const japanesePunctuationPattern = /[、。！？…「」『』（）［］｛｝〈〉《》【】：；・]/u;
+const japanesePunctuationPattern =
+  /[、。！？…「」『』（）［］｛｝〈〉《》【】：；・]/u;
+
+type IntlWordSegment = Intl.SegmentData & { isWordLike: true };
+
+const enum WordCharacterClass {
+  Regular,
+  Whitespace,
+  WordSeparator,
+}
 
 // minimal / custom モード共通の分割処理。
 // VSCode の editor.wordSeparators と同じ考え方で、
@@ -70,17 +83,32 @@ export default class CMJpPatch extends Plugin {
 
   segmenter?: Intl.Segmenter;
 
+  private ensureSegmenter(): Intl.Segmenter | null {
+    if (this.segmenter) {
+      return this.segmenter;
+    }
+    if (!window.Intl?.Segmenter) {
+      return null;
+    }
+
+    this.segmenter = new Intl.Segmenter(["ja-JP"], {
+      granularity: "word",
+    });
+    this.cachedSegmentText = null;
+    this.cachedWordSegments = [];
+    return this.segmenter;
+  }
+
   async loadSegmenter(): Promise<boolean> {
     // minimal / custom mode doesn't need Intl.Segmenter
     if (this.settings.splitMode !== "segmenter") {
-      console.info(`${this.settings.splitMode} mode: separator-based splitting`);
+      console.info(
+        `${this.settings.splitMode} mode: separator-based splitting`,
+      );
       return true;
     }
-    if (window.Intl?.Segmenter) {
-      this.segmenter = new Intl.Segmenter("ja-JP", {
-        granularity: "word",
-      });
-      console.info("window.Intl.Segmenter (ja-JP) loaded");
+    if (this.ensureSegmenter()) {
+      console.info("window.Intl.Segmenter ([ja-JP]) loaded");
       return true;
     }
     console.error("Intl.Segmenter is not available in this environment");
@@ -90,6 +118,11 @@ export default class CMJpPatch extends Plugin {
   // custom モードの区切り文字セット。設定文字列が変わったときだけ作り直す
   private separatorSet = new Set<string>();
   private separatorSource: string | null = null;
+  private readonly vscodeSeparatorSet = new Set(VSCODE_WORD_SEPARATORS);
+
+  // VS Code と同様、直前に処理した1行の word-like セグメントだけを保持する。
+  private cachedSegmentText: string | null = null;
+  private cachedWordSegments: IntlWordSegment[] = [];
 
   private getSeparatorSet(): Set<string> {
     if (this.separatorSource !== this.settings.wordSeparators) {
@@ -97,6 +130,76 @@ export default class CMJpPatch extends Plugin {
       this.separatorSet = new Set(this.separatorSource);
     }
     return this.separatorSet;
+  }
+
+  private getIntlWords(text: string): IntlWordSegment[] {
+    if (this.cachedSegmentText === text) {
+      return this.cachedWordSegments;
+    }
+
+    this.cachedSegmentText = text;
+    this.cachedWordSegments = [];
+    const segmenter = this.ensureSegmenter();
+    if (!segmenter) {
+      return this.cachedWordSegments;
+    }
+
+    for (const segment of segmenter.segment(text)) {
+      if (segment.isWordLike) {
+        this.cachedWordSegments.push(segment as IntlWordSegment);
+      }
+    }
+    return this.cachedWordSegments;
+  }
+
+  private classify(char: string): WordCharacterClass {
+    if (/\s/u.test(char)) {
+      return WordCharacterClass.Whitespace;
+    }
+    if (this.vscodeSeparatorSet.has(char)) {
+      return WordCharacterClass.WordSeparator;
+    }
+    return WordCharacterClass.Regular;
+  }
+
+  /**
+   * Intl.Segmenter の word-like な範囲を通常単語として優先し、範囲外は
+   * VS Code の従来方式と同じ文字クラスの連続として分割する。
+   * 戻り値は既存のカーソル処理で位置を復元できるよう、入力全体を覆う。
+   */
+  private vscodeLikeCut(text: string): string[] {
+    const words = this.getIntlWords(text);
+    const result: string[] = [];
+    let offset = 0;
+    let wordIndex = 0;
+
+    while (offset < text.length) {
+      const word = words[wordIndex];
+      if (word?.index === offset) {
+        result.push(word.segment);
+        offset += word.segment.length;
+        wordIndex++;
+        continue;
+      }
+
+      const nextWordOffset = word?.index ?? text.length;
+      const char = String.fromCodePoint(text.codePointAt(offset)!);
+      const charClass = this.classify(char);
+      let end = offset + char.length;
+
+      while (end < nextWordOffset) {
+        const nextChar = String.fromCodePoint(text.codePointAt(end)!);
+        if (this.classify(nextChar) !== charClass) {
+          break;
+        }
+        end += nextChar.length;
+      }
+
+      result.push(text.slice(offset, end));
+      offset = end;
+    }
+
+    return result;
   }
 
   cut(text: string): string[] {
@@ -110,9 +213,7 @@ export default class CMJpPatch extends Plugin {
         return separatorCut(text, (char) => separators.has(char));
       }
       default:
-        return Array.from(this.segmenter!.segment(text)).map(
-          (seg) => seg.segment,
-        );
+        return this.vscodeLikeCut(text);
     }
   }
 

@@ -3,10 +3,12 @@ import type CMJpPatch from "./chsp-main";
 
 export type SplitMode = "segmenter" | "minimal" | "custom";
 
-// VSCode の editor.wordSeparators 標準値 + 最小モードで使っている日本語句読点。
+// VS Code の editor.wordSeparators 標準値。
+export const VSCODE_WORD_SEPARATORS = "`~!@#$%^&*()-=+[{]}\\|;:'\",.<>/?";
+
+// VS Code の標準値 + 最小モードで使っている日本語句読点。
 // custom モードの初期値として「VSCode と同じ書き方」で編集できるようにする
-export const DEFAULT_WORD_SEPARATORS =
-  "/\\()\"':,.;<>~!@#$%^&*|+=[]{}`?-、。！？…「」『』（）［］｛｝〈〉《》【】：；・";
+export const DEFAULT_WORD_SEPARATORS = `${VSCODE_WORD_SEPARATORS}、。！？…「」『』（）［］｛｝〈〉《》【】：；・`;
 
 export interface JpPatchSetting {
   splitMode: SplitMode;
@@ -39,7 +41,9 @@ export class JpPatchSettingTab extends PluginSettingTab {
 
     containerEl.empty();
 
-    const segmenterGroup = new SettingGroup(containerEl).setHeading("分かち書き");
+    const segmenterGroup = new SettingGroup(containerEl).setHeading(
+      "分かち書き",
+    );
 
     segmenterGroup.addSetting((setting) =>
       setting
@@ -55,6 +59,7 @@ export class JpPatchSettingTab extends PluginSettingTab {
             .setValue(this.plugin.settings.splitMode)
             .onChange(async (value) => {
               this.plugin.settings.splitMode = value as SplitMode;
+              await this.plugin.loadSegmenter();
               await this.plugin.saveSettings();
               // custom 選択時のみ区切り文字入力欄を出すため再描画する
               this.display();
@@ -81,9 +86,7 @@ export class JpPatchSettingTab extends PluginSettingTab {
       );
     }
 
-    if (
-      this.plugin.app.vault.getConfig("vimMode") === true
-    ) {
+    if (this.plugin.app.vault.getConfig("vimMode") === true) {
       const vimGroup = new SettingGroup(containerEl).setHeading("Vim Mode");
 
       vimGroup.addSetting((setting) =>
