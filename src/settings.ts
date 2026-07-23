@@ -1,14 +1,23 @@
 import { PluginSettingTab, Setting, SettingGroup } from "obsidian";
 import type CMJpPatch from "./chsp-main";
 
+export type SplitMode = "segmenter" | "minimal" | "custom";
+
+// VSCode の editor.wordSeparators 標準値 + 最小モードで使っている日本語句読点。
+// custom モードの初期値として「VSCode と同じ書き方」で編集できるようにする
+export const DEFAULT_WORD_SEPARATORS =
+  "/\\()\"':,.;<>~!@#$%^&*|+=[]{}`?-、。！？…「」『』（）［］｛｝〈〉《》【】：；・";
+
 export interface JpPatchSetting {
-  minimalMode: boolean;
+  splitMode: SplitMode;
+  wordSeparators: string;
   moveByJapaneseWords: boolean;
   moveTillJapanesePunctuation: boolean;
 }
 
 export const DEFAULT_SETTINGS: JpPatchSetting = {
-  minimalMode: false,
+  splitMode: "segmenter",
+  wordSeparators: DEFAULT_WORD_SEPARATORS,
   moveByJapaneseWords: true,
   moveTillJapanesePunctuation: true,
 };
@@ -33,22 +42,44 @@ export class JpPatchSettingTab extends PluginSettingTab {
     const segmenterGroup = new SettingGroup(containerEl).setHeading("分かち書き");
 
     segmenterGroup.addSetting((setting) =>
-      this.bindToggle(setting, "minimalMode")
-        .setName("最小モード")
+      setting
+        .setName("分割方式")
         .setDesc(
-          "句読点（、。「」など）のみで分割します。オフの場合は Intl.Segmenter (ja-JP) による形態素解析で単語境界を検出します",
+          "Intl.Segmenter: ブラウザ組み込みの形態素解析 (ja-JP) で単語境界を検出。最小: 日本語の句読点と空白のみで分割。カスタム: 自分で定義した区切り文字で分割",
+        )
+        .addDropdown((dropdown) =>
+          dropdown
+            .addOption("segmenter", "Intl.Segmenter（形態素解析）")
+            .addOption("minimal", "最小（句読点のみ）")
+            .addOption("custom", "カスタム区切り文字")
+            .setValue(this.plugin.settings.splitMode)
+            .onChange(async (value) => {
+              this.plugin.settings.splitMode = value as SplitMode;
+              await this.plugin.saveSettings();
+              // custom 選択時のみ区切り文字入力欄を出すため再描画する
+              this.display();
+            }),
         ),
     );
 
-    segmenterGroup.addSetting((setting) =>
-      setting
-        .setName(this.plugin.settings.minimalMode ? "句読点ベース分割" : "Intl.Segmenter")
-        .setDesc(
-          this.plugin.settings.minimalMode
-            ? "日本語の句読点と空白のみを境界として分割します"
-            : "ブラウザ組み込みの Intl.Segmenter API (ja-JP) を使用して日本語の単語境界を検出します",
-        ),
-    );
+    if (this.plugin.settings.splitMode === "custom") {
+      segmenterGroup.addSetting((setting) =>
+        setting
+          .setName("区切り文字")
+          .setDesc(
+            "ここに列挙した文字を単語の区切りとして扱います。空白は常に区切りです",
+          )
+          .addText((text) =>
+            text
+              .setPlaceholder(DEFAULT_WORD_SEPARATORS)
+              .setValue(this.plugin.settings.wordSeparators)
+              .onChange(async (value) => {
+                this.plugin.settings.wordSeparators = value;
+                await this.plugin.saveSettings();
+              }),
+          ),
+      );
+    }
 
     if (
       this.plugin.app.vault.getConfig("vimMode") === true

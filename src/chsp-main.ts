@@ -13,11 +13,17 @@ const CJK_RANGE_LIMIT = 1000;
 // Japanese punctuation characters used as segment boundaries in minimal mode
 const japanesePunctuationPattern = /[、。！？…「」『』（）［］｛｝〈〉《》【】：；・]/u;
 
-function minimalCut(text: string): string[] {
+// minimal / custom モード共通の分割処理。
+// VSCode の editor.wordSeparators と同じ考え方で、
+// 区切り文字は単体で1トークン、それ以外の連続を1語として扱う（空白は常に区切り）
+function separatorCut(
+  text: string,
+  isSeparator: (char: string) => boolean,
+): string[] {
   const result: string[] = [];
   let current = "";
   for (const char of text) {
-    if (japanesePunctuationPattern.test(char) || /\s/.test(char)) {
+    if (isSeparator(char) || /\s/.test(char)) {
       if (current) result.push(current);
       result.push(char);
       current = "";
@@ -45,7 +51,17 @@ export default class CMJpPatch extends Plugin {
   settings = DEFAULT_SETTINGS;
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const data: unknown = await this.loadData();
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
+    // 旧バージョンの minimalMode (boolean) から splitMode への移行
+    if (
+      data &&
+      typeof data === "object" &&
+      "minimalMode" in data &&
+      !("splitMode" in data)
+    ) {
+      this.settings.splitMode = data.minimalMode ? "minimal" : "segmenter";
+    }
   }
 
   async saveSettings() {
@@ -55,9 +71,9 @@ export default class CMJpPatch extends Plugin {
   segmenter?: Intl.Segmenter;
 
   async loadSegmenter(): Promise<boolean> {
-    // minimal mode doesn't need Intl.Segmenter
-    if (this.settings.minimalMode) {
-      console.info("Minimal mode: using punctuation-based splitting");
+    // minimal / custom mode doesn't need Intl.Segmenter
+    if (this.settings.splitMode !== "segmenter") {
+      console.info(`${this.settings.splitMode} mode: separator-based splitting`);
       return true;
     }
     if (window.Intl?.Segmenter) {
@@ -71,11 +87,33 @@ export default class CMJpPatch extends Plugin {
     return false;
   }
 
-  cut(text: string): string[] {
-    if (this.settings.minimalMode) {
-      return minimalCut(text);
+  // custom モードの区切り文字セット。設定文字列が変わったときだけ作り直す
+  private separatorSet = new Set<string>();
+  private separatorSource: string | null = null;
+
+  private getSeparatorSet(): Set<string> {
+    if (this.separatorSource !== this.settings.wordSeparators) {
+      this.separatorSource = this.settings.wordSeparators;
+      this.separatorSet = new Set(this.separatorSource);
     }
-    return Array.from(this.segmenter!.segment(text)).map((seg) => seg.segment);
+    return this.separatorSet;
+  }
+
+  cut(text: string): string[] {
+    switch (this.settings.splitMode) {
+      case "minimal":
+        return separatorCut(text, (char) =>
+          japanesePunctuationPattern.test(char),
+        );
+      case "custom": {
+        const separators = this.getSeparatorSet();
+        return separatorCut(text, (char) => separators.has(char));
+      }
+      default:
+        return Array.from(this.segmenter!.segment(text)).map(
+          (seg) => seg.segment,
+        );
+    }
   }
 
   getSegRangeFromCursor(
@@ -86,8 +124,8 @@ export default class CMJpPatch extends Plugin {
     if (!isJapanese(text)) {
       return null;
     } else {
-      // In full mode, trim long text for performance
-      if (!this.settings.minimalMode) {
+      // In segmenter mode, trim long text for performance
+      if (this.settings.splitMode === "segmenter") {
         if (cursor - from > CJK_RANGE_LIMIT) {
           const newFrom = cursor - CJK_RANGE_LIMIT;
           if (isJapanese(text.slice(newFrom, cursor))) {
@@ -137,11 +175,12 @@ export default class CMJpPatch extends Plugin {
       ? sliceDoc(startPos, nextPos)
       : sliceDoc(nextPos, startPos);
 
-    // In minimal mode, don't limit — scan all the way to the next punctuation
-    // In full mode, limit to CJK_RANGE_LIMIT for performance
-    const text = this.settings.minimalMode
-      ? rawText
-      : limitJapaneseChars(rawText, forward);
+    // In minimal/custom mode, don't limit — scan all the way to the next separator
+    // In segmenter mode, limit to CJK_RANGE_LIMIT for performance
+    const text =
+      this.settings.splitMode === "segmenter"
+        ? limitJapaneseChars(rawText, forward)
+        : rawText;
 
     if (!isJapanese(text)) return null;
     const segResult = this.cut(text);
