@@ -15,7 +15,13 @@ const inside = (x: number, y: number, rect: Rect) =>
 // given position, whether they are related to the element before or
 // the element after the position.
 function findPositionSide(view: EditorView, pos: number, x: number, y: number) {
-  const line = LineView.find((view as any).docView, pos);
+  // `docView` is an internal implementation detail and may be unavailable
+  // while an editor is being destroyed or before it has finished mounting.
+  // Mouse handlers can still run during that window, so don't let the
+  // position-side hint turn into an exception.
+  const docView = (view as any).docView;
+  if (!docView?.children) return 1;
+  const line = LineView.find(docView, pos);
   if (!line) return 1;
   const off = pos - line.posAtStart;
   // Line boundaries point into the line
@@ -37,6 +43,7 @@ export function queryPos(
   event: MouseEvent,
 ): { pos: number; bias: 1 | -1 } | null {
   const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }, false);
+  if (pos == null) return null;
   return {
     pos,
     bias: findPositionSide(view, pos, event.clientX, event.clientY),
