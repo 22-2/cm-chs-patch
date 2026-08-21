@@ -4,6 +4,7 @@ import setupCM6 from "./cm6";
 import {
   JpPatchSettingTab,
   DEFAULT_SETTINGS,
+  getWordSegmenterLocales,
   VSCODE_WORD_SEPARATORS,
 } from "./settings";
 import { japanesePatternGlobal, isJapanese } from "./utils.js";
@@ -82,18 +83,39 @@ export default class CMJpPatch extends Plugin {
   }
 
   segmenter?: Intl.Segmenter;
+  private segmenterLocalesKey: string | null = null;
 
   private ensureSegmenter(): Intl.Segmenter | null {
-    if (this.segmenter) {
+    const locales = getWordSegmenterLocales(this.settings);
+    const localesKey = locales?.join(",") ?? "<default>";
+    if (this.segmenter && this.segmenterLocalesKey === localesKey) {
       return this.segmenter;
     }
+    if (locales && locales.length === 0) {
+      // VS Code treats a locale list with no supported tags as disabled
+      // segmentation; do not silently turn it into the host default here.
+      this.segmenter = undefined;
+      this.segmenterLocalesKey = localesKey;
+      this.cachedSegmentText = null;
+      this.cachedWordSegments = [];
+      return null;
+    }
     if (!window.Intl?.Segmenter) {
+      this.cachedSegmentText = null;
+      this.cachedWordSegments = [];
       return null;
     }
 
-    this.segmenter = new Intl.Segmenter(["ja-JP"], {
-      granularity: "word",
-    });
+    try {
+      this.segmenter = new Intl.Segmenter(locales, { granularity: "word" });
+    } catch {
+      this.segmenter = undefined;
+      this.segmenterLocalesKey = null;
+      this.cachedSegmentText = null;
+      this.cachedWordSegments = [];
+      return null;
+    }
+    this.segmenterLocalesKey = localesKey;
     this.cachedSegmentText = null;
     this.cachedWordSegments = [];
     return this.segmenter;
@@ -108,7 +130,10 @@ export default class CMJpPatch extends Plugin {
       return true;
     }
     if (this.ensureSegmenter()) {
-      console.info("window.Intl.Segmenter ([ja-JP]) loaded");
+      const locales = getWordSegmenterLocales(this.settings);
+      console.info(
+        `window.Intl.Segmenter (${locales?.join(", ") ?? "host default"}) loaded`,
+      );
       return true;
     }
     console.error("Intl.Segmenter is not available in this environment");
@@ -229,15 +254,20 @@ export default class CMJpPatch extends Plugin {
       if (this.settings.splitMode === "segmenter") {
         if (cursor - from > CJK_RANGE_LIMIT) {
           const newFrom = cursor - CJK_RANGE_LIMIT;
-          if (isJapanese(text.slice(newFrom, cursor))) {
+          // `text` is relative to `from`, whereas cursor/range coordinates are
+          // document offsets.  Convert both ends before checking the trimmed
+          // context or Intl.Segmenter can receive the wrong substring.
+          if (isJapanese(text.slice(newFrom - from, cursor - from))) {
             text = text.slice(newFrom - from);
             from = newFrom;
           }
         }
         if (to - cursor > CJK_RANGE_LIMIT) {
           const newTo = cursor + CJK_RANGE_LIMIT;
-          if (isJapanese(text.slice(cursor, newTo))) {
-            text = text.slice(0, newTo - to);
+          if (isJapanese(text.slice(cursor - from, newTo - from))) {
+            // `text` still starts at `from`; use the absolute end relative to
+            // that origin so the right-hand trim does not collapse the range.
+            text = text.slice(0, newTo - from);
             to = newTo;
           }
         }

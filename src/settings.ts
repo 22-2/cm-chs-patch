@@ -13,6 +13,8 @@ export const DEFAULT_WORD_SEPARATORS = `${VSCODE_WORD_SEPARATORS}、。！？…
 export interface JpPatchSetting {
   splitMode: SplitMode;
   wordSeparators: string;
+  /** Comma-separated BCP 47 locales used by Intl.Segmenter. */
+  wordSegmenterLocales: string;
   moveByJapaneseWords: boolean;
   moveTillJapanesePunctuation: boolean;
 }
@@ -20,9 +22,35 @@ export interface JpPatchSetting {
 export const DEFAULT_SETTINGS: JpPatchSetting = {
   splitMode: "segmenter",
   wordSeparators: DEFAULT_WORD_SEPARATORS,
+  // The project exists to provide Japanese/CJK splitting, while VS Code's
+  // own editor option defaults to no explicit locale.  Keep the project
+  // default stable and make the locale override visible in settings.
+  wordSegmenterLocales: "ja-JP",
   moveByJapaneseWords: true,
   moveTillJapanesePunctuation: true,
 };
+
+export function getWordSegmenterLocales(
+  settings: JpPatchSetting,
+): string[] | undefined {
+  if (settings.splitMode !== "segmenter") return [];
+  const locales = settings.wordSegmenterLocales
+    .split(",")
+    .map((locale) => locale.trim())
+    .filter(Boolean);
+  // `undefined` asks Intl.Segmenter to use the host default locale.  An empty
+  // array means that no usable locale survived validation (or segmentation is
+  // disabled by the caller).
+  if (locales.length === 0) return undefined;
+  if (typeof Intl === "undefined" || !Intl.Segmenter) return locales;
+  try {
+    // Match VS Code's editor option validation: unsupported BCP 47 tags are
+    // ignored individually instead of making one valid locale unusable.
+    return Intl.Segmenter.supportedLocalesOf(locales);
+  } catch {
+    return [];
+  }
+}
 
 type SettingKeyWithType<T> = {
   [K in keyof JpPatchSetting]: JpPatchSetting[K] extends T ? K : never;
@@ -80,6 +108,26 @@ export class JpPatchSettingTab extends PluginSettingTab {
               .setValue(this.plugin.settings.wordSeparators)
               .onChange(async (value) => {
                 this.plugin.settings.wordSeparators = value;
+                await this.plugin.saveSettings();
+              }),
+          ),
+      );
+    }
+
+    if (this.plugin.settings.splitMode === "segmenter") {
+      segmenterGroup.addSetting((setting) =>
+        setting
+          .setName("wordSegmenterLocales")
+          .setDesc(
+            "Intl.Segmenter に渡す BCP 47 ロケール。複数指定はカンマ区切り（例: ja-JP, zh-CN）。空欄なら環境の既定ロケール",
+          )
+          .addText((text) =>
+            text
+              .setPlaceholder("ja-JP")
+              .setValue(this.plugin.settings.wordSegmenterLocales)
+              .onChange(async (value) => {
+                this.plugin.settings.wordSegmenterLocales = value;
+                await this.plugin.loadSegmenter();
                 await this.plugin.saveSettings();
               }),
           ),

@@ -7,6 +7,12 @@ import { around } from "monkey-around";
 import type CMJpPatch from "../chsp-main";
 import { getJpPatchExtension } from "./chs-extension";
 import cm6GetJpSeg from "./get-seg";
+import {
+  WordNavigationType,
+  WordNavigator,
+  type WordModel,
+} from "./word-navigation";
+import { getWordSegmenterLocales } from "../settings";
 
 const setupCM6 = (plugin: CMJpPatch) => {
   plugin.registerEditorExtension(getJpPatchExtension(plugin));
@@ -23,82 +29,49 @@ const setupCM6 = (plugin: CMJpPatch) => {
     }),
   );
 
-  let origPos: number | null;
-
-  // cursor movement direction type
-  enum Direction {
-    BeginAndForward = "BeginAndForward",
-    BeginAndBackward = "BeginAndBackward",
-    ForwardAndForward = "ForwardAndForward",
-    ForwardAndBackward = "ForwardAndBackward",
-    BackwardAndForward = "BackwardAndForward",
-    BackwardAndBackward = "BackwardAndBackward",
-  }
-
   plugin.register(
     around(EditorView.prototype, {
       moveByGroup: (next) =>
         function (this: EditorView, start: SelectionRange, forward: boolean) {
-          const dest = next.call(this, start, forward);
-          if (dest.empty || start.empty) {
-            let direction: Direction | null;
-            if (dest.empty && start.empty) {
-              direction = forward
-                ? Direction.BeginAndForward
-                : Direction.BeginAndBackward;
-              origPos = start.from;
-            } else if (forward) {
-              direction =
-                origPos != start.to
-                  ? Direction.ForwardAndForward
-                  : Direction.BackwardAndForward;
-            } else {
-              direction =
-                origPos != start.from
-                  ? Direction.BackwardAndBackward
-                  : Direction.ForwardAndBackward;
-            }
+          const state = this.state;
+          const model: WordModel = {
+            getLineContent: (lineNumber) => state.doc.line(lineNumber).text,
+            getLineMaxColumn: (lineNumber) =>
+              state.doc.line(lineNumber).length + 1,
+            getLineCount: () => state.doc.lines,
+          };
+          const line = state.doc.lineAt(start.head);
+          const position = {
+            lineNumber: line.number,
+            column: start.head - line.from + 1,
+          };
+          const navigator = new WordNavigator({
+            wordSeparators: plugin.settings.wordSeparators,
+            wordSegmenterLocales: getWordSegmenterLocales(plugin.settings),
+          });
+          const destination = forward
+            ? navigator.moveWordRight(
+                model,
+                position,
+                WordNavigationType.WordEnd,
+              )
+            : navigator.moveWordLeft(
+                model,
+                position,
+                WordNavigationType.WordStartFast,
+                state.selection.ranges.length > 1,
+              );
+          const destinationLine = state.doc.line(destination.lineNumber);
+          const destinationOffset =
+            destinationLine.from + destination.column - 1;
 
-            let startPos: number;
-            switch (direction) {
-              case Direction.BeginAndForward:
-                startPos = start.from;
-                break;
-              case Direction.BeginAndBackward:
-              case Direction.ForwardAndBackward:
-                startPos = start.to;
-                break;
-              case Direction.ForwardAndForward:
-                if (start.from <= dest.to) {
-                  startPos = start.to + 1;
-                } else {
-                  startPos = start.from + 1;
-                }
-                break;
-              case Direction.BackwardAndForward:
-                startPos = start.from + 1;
-                break;
-              case Direction.BackwardAndBackward:
-                if (start.from > dest.to) {
-                  startPos = start.from - 1;
-                } else {
-                  startPos = start.to;
-                }
-                break;
-              default:
-                startPos = start.from;
-                break;
-            }
-
-            const destPos = plugin.getSegDestFromGroup(
-              startPos,
-              forward ? dest.from : dest.to,
-              this.state.sliceDoc.bind(this.state),
-            );
-
-            if (destPos) return EditorSelection.range(destPos, destPos);
+          // Keep CodeMirror's original result at a hard document boundary so
+          // widget/association behavior is preserved when there is nowhere to
+          // move.  Word boundaries themselves are decided by WordNavigator.
+          if (destinationOffset === start.head) {
+            return next.call(this, start, forward);
           }
-          return dest;
+          return EditorSelection.cursor(destinationOffset, forward ? -1 : 1);
         },
     }),
   );

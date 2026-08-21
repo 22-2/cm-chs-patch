@@ -5,19 +5,41 @@ import type { MouseSelectionStyle } from "@codemirror/view";
 import { EditorView } from "@codemirror/view";
 
 import type CMJpPatch from "../../chsp-main";
-import cm6GetJpSeg from "../get-seg";
-import { groupAt, queryPos } from "./from-src";
+import { getWordSegmenterLocales } from "../../settings";
+import { WordNavigator, type WordModel } from "../word-navigation";
+import { queryPos } from "./from-src";
 
 export const dblClickPatch = (plugin: CMJpPatch) => {
   /** only accept double click */
   const rangeForClick = (
     view: EditorView,
     pos: number,
-    bias: -1 | 1,
+    _bias: -1 | 1,
     _type: number,
   ): SelectionRange => {
-    const range = groupAt(view.state, pos, bias);
-    return cm6GetJpSeg(plugin, pos, range, view.state) ?? range;
+    const line = view.state.doc.lineAt(pos);
+    const model: WordModel = {
+      getLineContent: (lineNumber) => view.state.doc.line(lineNumber).text,
+      getLineMaxColumn: (lineNumber) =>
+        view.state.doc.line(lineNumber).length + 1,
+      getLineCount: () => view.state.doc.lines,
+    };
+    const navigator = new WordNavigator({
+      wordSeparators: plugin.settings.wordSeparators,
+      wordSegmenterLocales: getWordSegmenterLocales(plugin.settings),
+    });
+    const range = navigator.selectWord(model, {
+      lineNumber: line.number,
+      column: pos - line.from + 1,
+    });
+    const fromLine = view.state.doc.line(range.from.lineNumber);
+    const toLine = view.state.doc.line(range.to.lineNumber);
+    // WordNavigator works in line-relative one-based columns, while mouse
+    // selections use the document's UTF-16 offsets.
+    return EditorSelection.range(
+      fromLine.from + range.from.column - 1,
+      toLine.from + range.to.column - 1,
+    );
   };
   const dblClickPatch = EditorView.mouseSelectionStyle.of((view, event) => {
     // Only handle double clicks
