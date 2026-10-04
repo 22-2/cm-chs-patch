@@ -189,6 +189,50 @@ export class WordNavigator {
     );
   }
 
+  /**
+   * Reuse the cursor scanner for legacy token consumers. A separate splitter
+   * would disagree about runs of separators, whitespace, and Intl boundaries.
+   * Include whitespace gaps so callers can reconstruct UTF-16 offsets.
+   */
+  splitLine(line: string): string[] {
+    const result: string[] = [];
+    let offset = 0;
+    while (offset < line.length) {
+      const word = this.doFindNextWordOnLine(line, offset + 1, this.classifier);
+      if (!word) {
+        result.push(line.slice(offset));
+        break;
+      }
+      if (word.start > offset) result.push(line.slice(offset, word.start));
+      result.push(line.slice(Math.max(offset, word.start), word.end));
+      offset = word.end;
+    }
+    return result;
+  }
+
+  /** Match VS Code's getWordAtPosition, including its preference for the left word. */
+  getWordAtPosition(
+    model: WordModel,
+    position: WordPosition,
+  ): WordRange | null {
+    const offset = position.column - 1;
+    for (const word of [
+      this.findPreviousWordOnLine(model, position),
+      this.findNextWordOnLine(model, position),
+    ]) {
+      // Word lookup returns regular words only; double-click selection also
+      // selects punctuation and whitespace, so selectWord cannot replace it.
+      if (
+        word?.type === WordType.Regular &&
+        word.start <= offset &&
+        offset <= word.end
+      ) {
+        return this.rangeForWord(position.lineNumber, word);
+      }
+    }
+    return null;
+  }
+
   private findPreviousWordOnLineWithClassifier(
     model: WordModel,
     position: WordPosition,

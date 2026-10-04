@@ -1,56 +1,12 @@
 import { PluginSettingTab, Setting, SettingGroup } from "obsidian";
 import type CMJpPatch from "./chsp-main";
+import {
+  DEFAULT_WORD_SEPARATORS,
+  type JpPatchSetting,
+  type SplitMode,
+} from "./word-settings";
 
-export type SplitMode = "segmenter" | "minimal" | "custom";
-
-// VS Code の editor.wordSeparators 標準値。
-export const VSCODE_WORD_SEPARATORS = "`~!@#$%^&*()-=+[{]}\\|;:'\",.<>/?";
-
-// VS Code の標準値 + 最小モードで使っている日本語句読点。
-// custom モードの初期値として「VSCode と同じ書き方」で編集できるようにする
-export const DEFAULT_WORD_SEPARATORS = `${VSCODE_WORD_SEPARATORS}、。！？…「」『』（）［］｛｝〈〉《》【】：；・`;
-
-export interface JpPatchSetting {
-  splitMode: SplitMode;
-  wordSeparators: string;
-  /** Comma-separated BCP 47 locales used by Intl.Segmenter. */
-  wordSegmenterLocales: string;
-  moveByJapaneseWords: boolean;
-  moveTillJapanesePunctuation: boolean;
-}
-
-export const DEFAULT_SETTINGS: JpPatchSetting = {
-  splitMode: "segmenter",
-  wordSeparators: DEFAULT_WORD_SEPARATORS,
-  // The project exists to provide Japanese/CJK splitting, while VS Code's
-  // own editor option defaults to no explicit locale.  Keep the project
-  // default stable and make the locale override visible in settings.
-  wordSegmenterLocales: "ja-JP",
-  moveByJapaneseWords: true,
-  moveTillJapanesePunctuation: true,
-};
-
-export function getWordSegmenterLocales(
-  settings: JpPatchSetting,
-): string[] | undefined {
-  if (settings.splitMode !== "segmenter") return [];
-  const locales = settings.wordSegmenterLocales
-    .split(",")
-    .map((locale) => locale.trim())
-    .filter(Boolean);
-  // `undefined` asks Intl.Segmenter to use the host default locale.  An empty
-  // array means that no usable locale survived validation (or segmentation is
-  // disabled by the caller).
-  if (locales.length === 0) return undefined;
-  if (typeof Intl === "undefined" || !Intl.Segmenter) return locales;
-  try {
-    // Match VS Code's editor option validation: unsupported BCP 47 tags are
-    // ignored individually instead of making one valid locale unusable.
-    return Intl.Segmenter.supportedLocalesOf(locales);
-  } catch {
-    return [];
-  }
-}
+export * from "./word-settings";
 
 type SettingKeyWithType<T> = {
   [K in keyof JpPatchSetting]: JpPatchSetting[K] extends T ? K : never;
@@ -77,13 +33,13 @@ export class JpPatchSettingTab extends PluginSettingTab {
       setting
         .setName("分割方式")
         .setDesc(
-          "Intl.Segmenter: ブラウザ組み込みの形態素解析 (ja-JP) で単語境界を検出。最小: 日本語の句読点と空白のみで分割。カスタム: 自分で定義した区切り文字で分割",
+          "Intl.Segmenter: 形態素解析で単語境界を検出。最小: 日本語の句読点と空白のみで分割。カスタム: VS Code と同じ単語境界・Ctrl＋左右の移動規則で分割",
         )
         .addDropdown((dropdown) =>
           dropdown
             .addOption("segmenter", "Intl.Segmenter（形態素解析）")
             .addOption("minimal", "最小（句読点のみ）")
-            .addOption("custom", "カスタム区切り文字")
+            .addOption("custom", "カスタム区切り文字（VS Code）")
             .setValue(this.plugin.settings.splitMode)
             .onChange(async (value) => {
               this.plugin.settings.splitMode = value as SplitMode;
@@ -100,7 +56,7 @@ export class JpPatchSettingTab extends PluginSettingTab {
         setting
           .setName("区切り文字")
           .setDesc(
-            "ここに列挙した文字を単語の区切りとして扱います。空白は常に区切りです",
+            "VS Code の editor.wordSeparators と同じ指定です。連続する区切り記号はまとめて扱い、半角スペースとタブは常に空白として扱います",
           )
           .addText((text) =>
             text
@@ -110,23 +66,38 @@ export class JpPatchSettingTab extends PluginSettingTab {
                 this.plugin.settings.wordSeparators = value;
                 await this.plugin.saveSettings();
               }),
+          )
+          // 保存済みの区切り文字を勝手に変更しないよう、初期値への復帰は明示操作にする。
+          .addButton((button) =>
+            button.setButtonText("VS Code の初期値に戻す").onClick(async () => {
+              this.plugin.settings.wordSeparators = DEFAULT_WORD_SEPARATORS;
+              await this.plugin.saveSettings();
+              this.display();
+            }),
           ),
       );
     }
 
-    if (this.plugin.settings.splitMode === "segmenter") {
+    if (this.plugin.settings.splitMode !== "minimal") {
+      // モード切替だけで日本語の形態素解析が有効にならないよう、ロケールを別々に保存する。
+      const localeKey =
+        this.plugin.settings.splitMode === "custom"
+          ? "customWordSegmenterLocales"
+          : "wordSegmenterLocales";
       segmenterGroup.addSetting((setting) =>
         setting
           .setName("wordSegmenterLocales")
           .setDesc(
-            "Intl.Segmenter に渡す BCP 47 ロケール。複数指定はカンマ区切り（例: ja-JP, zh-CN）。空欄なら環境の既定ロケール",
+            this.plugin.settings.splitMode === "custom"
+              ? "VS Code の editor.wordSegmenterLocales と同じ指定です。空欄なら形態素解析なし（VS Code の初期値）。日本語も単語単位で分割するなら ja。複数指定はカンマ区切り"
+              : "Intl.Segmenter に渡す BCP 47 ロケール。複数指定はカンマ区切り（例: ja-JP, zh-CN）。空欄なら環境の既定ロケール",
           )
           .addText((text) =>
             text
               .setPlaceholder("ja-JP")
-              .setValue(this.plugin.settings.wordSegmenterLocales)
+              .setValue(this.plugin.settings[localeKey])
               .onChange(async (value) => {
-                this.plugin.settings.wordSegmenterLocales = value;
+                this.plugin.settings[localeKey] = value;
                 await this.plugin.loadSegmenter();
                 await this.plugin.saveSettings();
               }),

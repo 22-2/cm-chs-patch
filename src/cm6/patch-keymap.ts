@@ -4,12 +4,7 @@ import { EditorSelection } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 
 import type CMJpPatch from "../chsp-main";
-import { getWordSegmenterLocales } from "../settings";
-import {
-  WordNavigationType,
-  WordNavigator,
-  type WordModel,
-} from "./word-navigation";
+import { WordNavigationType, type WordModel } from "./word-navigation";
 
 export const patchKeymap = (plugin: CMJpPatch) => {
   // based on https://github.com/codemirror/commands/releases/tag/6.1.1
@@ -20,12 +15,6 @@ export const patchKeymap = (plugin: CMJpPatch) => {
     getLineCount: () => state.doc.lines,
   });
 
-  const getWordNavigator = () =>
-    new WordNavigator({
-      wordSeparators: plugin.settings.wordSeparators,
-      wordSegmenterLocales: getWordSegmenterLocales(plugin.settings),
-    });
-
   const moveByWord = (
     target: CommandTarget,
     forward: boolean,
@@ -34,7 +23,7 @@ export const patchKeymap = (plugin: CMJpPatch) => {
   ) => {
     const { state } = target;
     const model = getWordModel(state);
-    const navigator = getWordNavigator();
+    const navigator = plugin.getWordNavigator();
     const hasMulticursor = state.selection.ranges.length > 1;
     const changes = state.changeByRange((range) => {
       const line = state.doc.lineAt(range.head);
@@ -152,7 +141,7 @@ export const patchKeymap = (plugin: CMJpPatch) => {
         lineNumber: line.number,
         column: start - line.from + 1,
       };
-      const navigator = getWordNavigator();
+      const navigator = plugin.getWordNavigator();
       const range = forward
         ? navigator.deleteWordRight(
             model,

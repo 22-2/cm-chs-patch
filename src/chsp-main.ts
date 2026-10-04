@@ -8,6 +8,7 @@ import {
   VSCODE_WORD_SEPARATORS,
 } from "./settings";
 import { japanesePatternGlobal, isJapanese } from "./utils.js";
+import { WordNavigator } from "./cm6/word-navigation";
 
 // 極端に長い1行（数十万文字のペースト等）への保険としての上限。
 // Intl.Segmenter は辞書ベースで前後の文脈から単語境界を決めるため、
@@ -27,9 +28,8 @@ const enum WordCharacterClass {
   WordSeparator,
 }
 
-// minimal / custom モード共通の分割処理。
-// VSCode の editor.wordSeparators と同じ考え方で、
-// 区切り文字は単体で1トークン、それ以外の連続を1語として扱う（空白は常に区切り）
+// 最小モードは句読点を1文字ずつ扱う従来の分割を維持する。
+// カスタムモードは VS Code の走査処理を使い、連続する記号もまとめる。
 function separatorCut(
   text: string,
   isSeparator: (char: string) => boolean,
@@ -122,7 +122,8 @@ export default class CMJpPatch extends Plugin {
   }
 
   async loadSegmenter(): Promise<boolean> {
-    // minimal / custom mode doesn't need Intl.Segmenter
+    // Custom mode can optionally use Intl.Segmenter through WordNavigator,
+    // but like minimal mode it still works with separator navigation alone.
     if (this.settings.splitMode !== "segmenter") {
       console.info(
         `${this.settings.splitMode} mode: separator-based splitting`,
@@ -140,21 +141,31 @@ export default class CMJpPatch extends Plugin {
     return false;
   }
 
-  // custom モードの区切り文字セット。設定文字列が変わったときだけ作り直す
-  private separatorSet = new Set<string>();
-  private separatorSource: string | null = null;
+  private cachedWordNavigator?: { key: string; value: WordNavigator };
   private readonly vscodeSeparatorSet = new Set(VSCODE_WORD_SEPARATORS);
 
   // VS Code と同様、直前に処理した1行の word-like セグメントだけを保持する。
   private cachedSegmentText: string | null = null;
   private cachedWordSegments: IntlWordSegment[] = [];
 
-  private getSeparatorSet(): Set<string> {
-    if (this.separatorSource !== this.settings.wordSeparators) {
-      this.separatorSource = this.settings.wordSeparators;
-      this.separatorSet = new Set(this.separatorSource);
+  getWordNavigator(): WordNavigator {
+    const wordSegmenterLocales = getWordSegmenterLocales(this.settings);
+    const key = JSON.stringify([
+      this.settings.wordSeparators,
+      wordSegmenterLocales,
+    ]);
+    // 移動・選択・Vim の分割で直前の行のキャッシュを共有し、
+    // 単語境界の設定が変わったときだけ分類器を作り直す。
+    if (this.cachedWordNavigator?.key !== key) {
+      this.cachedWordNavigator = {
+        key,
+        value: new WordNavigator({
+          wordSeparators: this.settings.wordSeparators,
+          wordSegmenterLocales,
+        }),
+      };
     }
-    return this.separatorSet;
+    return this.cachedWordNavigator.value;
   }
 
   private getIntlWords(text: string): IntlWordSegment[] {
@@ -233,10 +244,8 @@ export default class CMJpPatch extends Plugin {
         return separatorCut(text, (char) =>
           japanesePunctuationPattern.test(char),
         );
-      case "custom": {
-        const separators = this.getSeparatorSet();
-        return separatorCut(text, (char) => separators.has(char));
-      }
+      case "custom":
+        return this.getWordNavigator().splitLine(text);
       default:
         return this.vscodeLikeCut(text);
     }

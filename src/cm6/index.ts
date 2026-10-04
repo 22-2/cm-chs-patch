@@ -7,12 +7,7 @@ import { around } from "monkey-around";
 import type CMJpPatch from "../chsp-main";
 import { getJpPatchExtension } from "./chs-extension";
 import cm6GetJpSeg from "./get-seg";
-import {
-  WordNavigationType,
-  WordNavigator,
-  type WordModel,
-} from "./word-navigation";
-import { getWordSegmenterLocales } from "../settings";
+import { WordNavigationType, type WordModel } from "./word-navigation";
 
 const setupCM6 = (plugin: CMJpPatch) => {
   plugin.registerEditorExtension(getJpPatchExtension(plugin));
@@ -21,10 +16,29 @@ const setupCM6 = (plugin: CMJpPatch) => {
     around(EditorState.prototype, {
       wordAt: (next) =>
         function (this: EditorState, pos: number) {
+          if (plugin.settings.splitMode === "custom") {
+            const line = this.doc.lineAt(pos);
+            const model: WordModel = {
+              getLineContent: (lineNumber) => this.doc.line(lineNumber).text,
+              getLineMaxColumn: (lineNumber) =>
+                this.doc.line(lineNumber).length + 1,
+              getLineCount: () => this.doc.lines,
+            };
+            // CodeMirror's original word range can already stop at punctuation
+            // that VS Code treats as regular text. Scan the whole line first.
+            const range = plugin.getWordNavigator().getWordAtPosition(model, {
+              lineNumber: line.number,
+              column: pos - line.from + 1,
+            });
+            return range
+              ? EditorSelection.range(
+                  line.from + range.from.column - 1,
+                  line.from + range.to.column - 1,
+                )
+              : null;
+          }
           const srcRange = next.call(this, pos);
-          return (
-            cm6GetJpSeg(plugin, pos, next.call(this, pos), this) ?? srcRange
-          );
+          return cm6GetJpSeg(plugin, pos, srcRange, this) ?? srcRange;
         },
     }),
   );
@@ -45,10 +59,7 @@ const setupCM6 = (plugin: CMJpPatch) => {
             lineNumber: line.number,
             column: start.head - line.from + 1,
           };
-          const navigator = new WordNavigator({
-            wordSeparators: plugin.settings.wordSeparators,
-            wordSegmenterLocales: getWordSegmenterLocales(plugin.settings),
-          });
+          const navigator = plugin.getWordNavigator();
           const destination = forward
             ? navigator.moveWordRight(
                 model,

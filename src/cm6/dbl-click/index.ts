@@ -5,8 +5,7 @@ import type { MouseSelectionStyle } from "@codemirror/view";
 import { EditorView } from "@codemirror/view";
 
 import type CMJpPatch from "../../chsp-main";
-import { getWordSegmenterLocales } from "../../settings";
-import { WordNavigator, type WordModel } from "../word-navigation";
+import type { WordModel } from "../word-navigation";
 import { queryPos } from "./from-src";
 
 export const dblClickPatch = (plugin: CMJpPatch) => {
@@ -24,10 +23,7 @@ export const dblClickPatch = (plugin: CMJpPatch) => {
         view.state.doc.line(lineNumber).length + 1,
       getLineCount: () => view.state.doc.lines,
     };
-    const navigator = new WordNavigator({
-      wordSeparators: plugin.settings.wordSeparators,
-      wordSegmenterLocales: getWordSegmenterLocales(plugin.settings),
-    });
+    const navigator = plugin.getWordNavigator();
     const range = navigator.selectWord(model, {
       lineNumber: line.number,
       column: pos - line.from + 1,
