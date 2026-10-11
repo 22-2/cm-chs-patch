@@ -13,7 +13,7 @@ export const dblClickPatch = (plugin: CMJpPatch) => {
   const rangeForClick = (
     view: EditorView,
     pos: number,
-    _bias: -1 | 1,
+    bias: -1 | 1,
     _type: number,
   ): SelectionRange => {
     const line = view.state.doc.lineAt(pos);
@@ -24,10 +24,11 @@ export const dblClickPatch = (plugin: CMJpPatch) => {
       getLineCount: () => view.state.doc.lines,
     };
     const navigator = plugin.getWordNavigator();
-    const range = navigator.selectWord(model, {
-      lineNumber: line.number,
-      column: pos - line.from + 1,
-    });
+    const range = navigator.selectWord(
+      model,
+      { lineNumber: line.number, column: pos - line.from + 1 },
+      bias,
+    );
     const fromLine = view.state.doc.line(range.from.lineNumber);
     const toLine = view.state.doc.line(range.to.lineNumber);
     // WordNavigator works in line-relative one-based columns, while mouse

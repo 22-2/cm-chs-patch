@@ -377,3 +377,47 @@ function assertPositions(
     { lineNumber: 1, column: 1 },
   );
 }
+
+// Mouse hits at the same offset must choose the character on the clicked
+// side, including punctuation, whitespace, CJK and UTF-16 graphemes.
+{
+  const navigator = new WordNavigator({
+    wordSeparators: WORD_SEPARATORS,
+    wordSegmenterLocales: ["ja"],
+  });
+  const cases: Array<[string, number, -1 | 1, number, number]> = [
+    ["foo...bar", 3, -1, 0, 3],
+    ["foo...bar", 3, 1, 3, 6],
+    ["foo...bar", 6, -1, 3, 6],
+    ["foo...bar", 6, 1, 6, 9],
+    ["foo bar", 3, -1, 0, 3],
+    ["foo bar", 3, 1, 3, 4],
+    ["foo bar", 4, -1, 3, 4],
+    ["foo bar", 4, 1, 4, 7],
+    ["これはテストです", 2, -1, 0, 2],
+    ["これはテストです", 2, 1, 2, 3],
+    ["これはテストです", 3, -1, 2, 3],
+    ["これはテストです", 3, 1, 3, 6],
+    ["🐶.bar", 2, -1, 0, 2],
+    ["🐶.bar", 2, 1, 2, 3],
+    ["e\u0301!bar", 2, -1, 0, 2],
+    ["e\u0301!bar", 2, 1, 2, 3],
+    ["foo", 0, -1, 0, 3],
+    ["foo", 3, 1, 0, 3],
+    ["", 0, -1, 0, 0],
+  ];
+  for (const [text, offset, bias, from, to] of cases) {
+    assert.deepStrictEqual(
+      navigator.selectWord(
+        new TestModel(["preceding line", text]),
+        { lineNumber: 2, column: offset + 1 },
+        bias,
+      ),
+      {
+        from: { lineNumber: 2, column: from + 1 },
+        to: { lineNumber: 2, column: to + 1 },
+      },
+      `${JSON.stringify(text)} at ${offset}, bias ${bias}`,
+    );
+  }
+}

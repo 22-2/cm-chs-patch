@@ -84,24 +84,22 @@ Special Thanks to [@fengkx](https://github.com/fengkx) for [jieba-wasm module](h
 ### Prerequisites
 
 - **Node.js 26+** — pinned in [`mise.toml`](mise.toml); the easiest way to provision it is [mise](https://mise.jdx.dev). If you manage Node yourself, run `corepack enable` to activate pnpm.
-- **pnpm 11.0.9** — sourced from `packageManager` in [`package.json`](package.json) via corepack. No global install needed.
-- **Git** with submodule support (any modern version).
+- **pnpm 12.9.0** — sourced from `packageManager` in [`package.json`](package.json) via corepack. No global install needed.
+- **Obsidian 1.14.4+** — required for CodeMirror's public mouse hit-testing API.
+- **Git** (any modern version).
 
 ### One-time setup
 
 ```bash
-# 1. Clone with the cm-view submodule populated.
-#    If you already cloned without `--recurse-submodules`, run the second line instead.
-git clone --recurse-submodules https://github.com/aidenlx/cm-chs-patch.git
-git submodule update --init --recursive
+# 1. Clone the repository.
+git clone https://github.com/22-2/cm-chs-patch.git
 
 cd cm-chs-patch
 
 # 2. Provision Node 26 + enable corepack (skip if you manage Node yourself).
 mise install
 
-# 3. Install dependencies. The `packages/cm-view` workspace package's `prepare`
-#    hook builds its `dist/` (the @codemirror/view internal bundle) automatically.
+# 3. Install dependencies.
 pnpm install
 ```
 

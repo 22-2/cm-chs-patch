@@ -9,6 +9,8 @@
  * selection APIs use.  Intl.Segmenter.index/segment.length use the same unit.
  */
 
+import { findClusterBreak } from "@codemirror/state";
+
 export enum WordCharacterClass {
   Regular,
   Whitespace,
@@ -649,17 +651,39 @@ export class WordNavigator {
 
   /**
    * Implements the non-drag part of VS Code's `WordOperations.word` used by
-   * double-click selection.  The caller can still use the editor's mouse bias
-   * when it needs visual-side disambiguation at a boundary.
+   * double-click selection. An explicit mouse bias selects the character on
+   * that side of a boundary; other callers retain VS Code's left preference.
    */
-  selectWord(model: WordModel, position: WordPosition): WordRange {
+  selectWord(
+    model: WordModel,
+    initialPosition: WordPosition,
+    bias?: -1 | 1,
+  ): WordRange {
+    const line = model.getLineContent(initialPosition.lineNumber);
+    let side = bias;
+    if (side !== undefined) {
+      if (initialPosition.column === 1) side = 1;
+      else if (initialPosition.column === line.length + 1) side = -1;
+    }
+    // A right-half hit points after the clicked character. Move inside its
+    // grapheme without splitting surrogate pairs or combining sequences.
+    const position =
+      side === -1 && initialPosition.column > 1
+        ? {
+            lineNumber: initialPosition.lineNumber,
+            column:
+              findClusterBreak(line, initialPosition.column - 1, false) + 1,
+          }
+        : initialPosition;
     const previous = this.findPreviousWordOnLine(model, position);
     const next = this.findNextWordOnLine(model, position);
     const offset = position.column - 1;
 
     const touches = (word: FoundWord) =>
       word.start <= offset &&
-      (word.type === WordType.Regular ? offset <= word.end : offset < word.end);
+      (bias === undefined && word.type === WordType.Regular
+        ? offset <= word.end
+        : offset < word.end);
 
     if (previous && touches(previous)) {
       return this.rangeForWord(position.lineNumber, previous);
