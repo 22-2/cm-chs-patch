@@ -1,6 +1,6 @@
 {
-  "id": "cm-chs-patch",
-  "name": "Japanese Word Splitting",
+  "id": "japanese-word-splitting-22-2",
+  "name": "Japanese Word Splitting (22-2)",
   "version": "1.13.4",
   "minAppVersion": "1.14.4",
   "description": "Adds Japanese word splitting support for the editor and Vim mode.",

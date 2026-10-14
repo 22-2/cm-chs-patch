@@ -1,8 +1,8 @@
 {
-  "name": "cm-chs-patch",
+  "name": "japanese-word-splitting-22-2",
   "version": "1.13.4",
   "private": true,
-  "description": "A patch for Obsidian's built-in CodeMirror Editor to support Simplified Chinese word splitting",
+  "description": "Adds Japanese word splitting support for the editor and Vim mode.",
   "keywords": [],
   "license": "MIT",
   "author": "AidenLx",

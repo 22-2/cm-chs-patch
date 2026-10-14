@@ -1,8 +1,8 @@
-# Simplified Chinese Word Splitting
+# Japanese Word Splitting (22-2)
 
-Adds Simplified Chinese word splitting support for the editor and Vim mode for Obsidian.md
+Adds Japanese word splitting support for the editor and Vim mode for Obsidian.md.
 
-增加 Obsidian 内置编辑器的(简体)中文分词支持，使得编辑模式的双击可以选中中文，以及在 Vim 模式下可以按中文分词移动光标
+This is a fork of [aidenlx/cm-chs-patch](https://github.com/aidenlx/cm-chs-patch), maintained in [22-2/cm-chs-patch](https://github.com/22-2/cm-chs-patch). Its plugin ID is `japanese-word-splitting-22-2`, separate from upstream's `cm-chs-patch`, so Obsidian's community plugin updater does not identify it as the upstream plugin.
 
 Special Thanks to [@fengkx](https://github.com/fengkx) for [jieba-wasm module](https://github.com/fengkx/jieba-wasm)
 感谢 [@jiyee](https://github.com/jiyee) 实现的Vim分词支持！
@@ -39,45 +39,24 @@ Special Thanks to [@fengkx](https://github.com/fengkx) for [jieba-wasm module](h
 >
 > On mobile, the file is stored inside the vault's config directory (`<vault>/.obsidian/jieba_rs_wasm_<version>.wasm`) using the standard Obsidian vault API, and no direct filesystem access is involved.
 
-## Installation 安装
+## Installation
 
-### From Obsidian
+1. Download `main.js` and `manifest.json` from a release of [this fork](https://github.com/22-2/cm-chs-patch/releases). Check that the manifest ID is `japanese-word-splitting-22-2`; older releases still use the upstream ID. Alternatively, build from source as described below.
+2. Put both files in `<vault>/.obsidian/plugins/japanese-word-splitting-22-2`.
+3. Reload Obsidian and enable **Japanese Word Splitting (22-2)** in Settings > Community plugins.
 
-1. Open `Settings` > `Third-party plugin`
-2. Make sure Safe mode is **off**
-3. Click `Browse community plugins`
-4. Search for this plugin `Simplified Chinese Word Splitting`
-5. Click `Install`
-6. Once installed, close the community plugins window and the patch is ready to use.
+Install updates from this fork. The community plugin catalog entry for **Simplified Chinese Word Splitting** installs the upstream plugin.
 
----
+### Migrating from the upstream ID
 
-1. 打开`设置`>`第三方插件`
-2. 确保安全模式为`关闭`
-3. 点击`浏览社区插件`
-4. 搜索此插件 `Word Splitting for Simplified Chinese in Edit Mode and Vim Mode`
-5. 点击`安装`
-6. 安装完成后，关闭安装窗口，插件即可使用
+1. Disable the existing `cm-chs-patch` plugin in Obsidian, then close Obsidian.
+2. Back up `<vault>/.obsidian/plugins/cm-chs-patch/data.json` if it exists.
+3. Rename the plugin folder from `cm-chs-patch` to `japanese-word-splitting-22-2`, and replace `main.js` and `manifest.json` with this fork's new build. Keep `data.json` to preserve your settings.
+4. Reopen Obsidian and enable **Japanese Word Splitting (22-2)**. Keep the upstream plugin disabled if it is also installed.
 
-### From GitHub
+If an updater such as BRAT manages the old installation, remove that updater entry and configure it to use this fork before enabling updates again.
 
-1. Download the Latest Release from the Releases section of the GitHub Repository
-2. Put files to your vault's plugins folder: `<vault>/.obsidian/plugins/cm-chs-patch`
-3. Reload Obsidian
-4. If prompted about Safe Mode, you can disable safe mode and enable the plugin.
-   Otherwise head to Settings, third-party plugins, make sure safe mode is off and
-   enable the plugin from there.
-
-> Note: The `.obsidian` folder may be hidden. On macOS you should be able to press `Command+Shift+Dot` to show the folder in Finder.
-
----
-
-1. 从 GitHub 仓库的 Releases 下载最新版本
-2. 把文件放在对应 Vault 的插件文件夹下：`<vault>/.obsidian/plugins/cm-chs-patch`
-3. 重新加载 Obsidian
-4. 如果出现有关安全模式的提示，则可以禁用安全模式并启用插件。否则，请转到`设置`→`第三方插件`，确保关闭安全模式，然后从`第三方插件`启用插件
-
-> 注意，`.obsidian` 文件夹为隐藏文件夹，在 macOS 的 Finder 下可以按 `Command+Shift+.` 以显示隐藏文件夹
+> Note: Replace `.obsidian` with your vault's configuration folder if you use a custom one. On macOS, press `Command+Shift+Dot` to show hidden folders in Finder.
 
 ## Development
 
@@ -116,4 +95,4 @@ pnpm install
 
 ### Loading the build into Obsidian
 
-Symlink (or copy) `build/` into a test vault as `<vault>/.obsidian/plugins/cm-chs-patch`, then enable the plugin in Obsidian's Community Plugins settings. With [Hot-Reload](https://github.com/pjeby/hot-reload) installed in the same vault, `pnpm dev` triggers live reloads on rebuild.
+Symlink (or copy) `build/` into a test vault as `<vault>/.obsidian/plugins/japanese-word-splitting-22-2`, then enable **Japanese Word Splitting (22-2)** in Obsidian's Community Plugins settings. With [Hot-Reload](https://github.com/pjeby/hot-reload) installed in the same vault, `pnpm dev` triggers live reloads on rebuild.
