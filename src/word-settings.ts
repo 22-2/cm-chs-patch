@@ -1,8 +1,11 @@
 export type SplitMode = "segmenter" | "minimal" | "custom";
 
-// VS Code の初期値に日本語の記号を足すと通常文字の連続が変わるため、そのまま使う。
+// 形態素解析モードは記号の連続を VS Code の初期値で判定するため、別に残す。
 export const VSCODE_WORD_SEPARATORS = "`~!@#$%^&*()-=+[{]}\\|;:'\",.<>/?";
-export const DEFAULT_WORD_SEPARATORS = VSCODE_WORD_SEPARATORS;
+// VS Code の editor.wordSeparators に日本語の記号と助詞を足した初期値。
+// 形態素解析を使わず、句読点・括弧・助詞（てにをは）の位置で区切る。
+export const DEFAULT_WORD_SEPARATORS =
+  "/\\()\"':,.;<>~!@#$%^&*|+=[]{}`?-、。「」【】『』（）！？＝・／　：てにをは";
 
 export interface JpPatchSetting {
   splitMode: SplitMode;
@@ -16,9 +19,9 @@ export interface JpPatchSetting {
 }
 
 export const DEFAULT_SETTINGS: JpPatchSetting = {
-  splitMode: "segmenter",
+  splitMode: "custom",
   wordSeparators: DEFAULT_WORD_SEPARATORS,
-  // 形態素解析モードの日本語分割は維持し、カスタムは VS Code と同じ初期値にする。
+  // 形態素解析モードへ切り替えたときは日本語で分割し、カスタムは形態素解析なしにする。
   wordSegmenterLocales: "ja-JP",
   customWordSegmenterLocales: "",
   moveByJapaneseWords: true,

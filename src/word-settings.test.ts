@@ -4,6 +4,7 @@ import {
   DEFAULT_WORD_SEPARATORS,
   VSCODE_WORD_SEPARATORS,
   getWordSegmenterLocales,
+  type JpPatchSetting,
 } from "./word-settings.js";
 import {
   WordNavigator,
@@ -11,8 +12,13 @@ import {
   type WordModel,
 } from "./cm6/word-navigation.js";
 
-const customSettings = { ...DEFAULT_SETTINGS, splitMode: "custom" as const };
-const createNavigator = (settings = customSettings) =>
+// 以下は VS Code 本体の初期値での挙動を確かめるため、区切り文字を明示する。
+const customSettings = {
+  ...DEFAULT_SETTINGS,
+  splitMode: "custom" as const,
+  wordSeparators: VSCODE_WORD_SEPARATORS,
+};
+const createNavigator = (settings: JpPatchSetting = customSettings) =>
   new WordNavigator({
     wordSeparators: settings.wordSeparators,
     wordSegmenterLocales: getWordSegmenterLocales(settings),
@@ -23,9 +29,31 @@ const modelFor = (line: string): WordModel => ({
   getLineCount: () => 1,
 });
 
-assert.equal(DEFAULT_WORD_SEPARATORS, VSCODE_WORD_SEPARATORS);
+assert.equal(DEFAULT_SETTINGS.splitMode, "custom");
+assert.equal(DEFAULT_SETTINGS.wordSeparators, DEFAULT_WORD_SEPARATORS);
+assert.deepStrictEqual(getWordSegmenterLocales(DEFAULT_SETTINGS), []);
 assert.deepStrictEqual(getWordSegmenterLocales(customSettings), []);
-assert.deepStrictEqual(getWordSegmenterLocales(DEFAULT_SETTINGS), ["ja-JP"]);
+assert.deepStrictEqual(
+  getWordSegmenterLocales({ ...DEFAULT_SETTINGS, splitMode: "segmenter" }),
+  ["ja-JP"],
+);
+assert.deepStrictEqual(
+  createNavigator(DEFAULT_SETTINGS).splitLine(
+    "今日は東京へ行きます。「明日」も雨が降るでしょう、たぶん。",
+  ),
+  [
+    "今日",
+    "は",
+    "東京へ行きます",
+    "。「",
+    "明日",
+    "」",
+    "も雨が降るでしょう",
+    "、",
+    "たぶん",
+    "。",
+  ],
+);
 assert.deepStrictEqual(
   getWordSegmenterLocales({ ...customSettings, splitMode: "minimal" }),
   [],

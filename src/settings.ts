@@ -69,7 +69,7 @@ export class JpPatchSettingTab extends PluginSettingTab {
           )
           // 保存済みの区切り文字を勝手に変更しないよう、初期値への復帰は明示操作にする。
           .addButton((button) =>
-            button.setButtonText("VS Code の初期値に戻す").onClick(async () => {
+            button.setButtonText("初期値に戻す").onClick(async () => {
               this.plugin.settings.wordSeparators = DEFAULT_WORD_SEPARATORS;
               await this.plugin.saveSettings();
               this.display();
