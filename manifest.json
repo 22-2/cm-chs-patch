@@ -1,10 +1,10 @@
 {
   "id": "japanese-word-splitting-22-2",
-  "name": "Japanese Word Splitting (AidenLx, 22-2)",
+  "name": "Japanese Word Splitting",
   "version": "1.14.0",
   "minAppVersion": "1.14.4",
   "description": "Adds Japanese word splitting support for the editor and Vim mode.",
-  "author": "AidenLx",
+  "author": "AidenLx, 22-2",
   "authorUrl": "https://github.com/AidenLx",
   "isDesktopOnly": false
 }
